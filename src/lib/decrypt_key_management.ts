@@ -1,3 +1,4 @@
+import { isNodeJs } from '../runtime/env.js'
 import { unwrap as aesKw } from '../runtime/aeskw.js'
 import * as ECDH from '../runtime/ecdhes.js'
 import { decrypt as pbes2Kw } from '../runtime/pbes2kw.js'
@@ -10,7 +11,7 @@ import { bitLength as cekLength } from '../lib/cek.js'
 import { importJWK } from '../key/import.js'
 import checkKeyType from './check_key_type.js'
 import isObject from './is_object.js'
-import { unwrap as aesGcmKw } from './aesgcmkw.js'
+import { unwrap as enckw } from './enckw.js'
 
 async function decryptKeyManagement(
   alg: string,
@@ -33,6 +34,7 @@ async function decryptKeyManagement(
       if (encryptedKey !== undefined)
         throw new JWEInvalid('Encountered unexpected JWE Encrypted Key')
 
+    case isNodeJs() && 'ECDH-ES+C20PKW':
     case 'ECDH-ES+A128KW':
     case 'ECDH-ES+A192KW':
     case 'ECDH-ES+A256KW': {
@@ -65,7 +67,11 @@ async function decryptKeyManagement(
         epk,
         key,
         alg === 'ECDH-ES' ? joseHeader.enc! : alg,
-        alg === 'ECDH-ES' ? cekLength(joseHeader.enc!) : parseInt(alg.substr(-5, 3), 10),
+        alg === 'ECDH-ES'
+          ? cekLength(joseHeader.enc!)
+          : alg === 'ECDH-ES+C20PKW'
+          ? 256
+          : parseInt(alg.substr(-5, 3), 10),
         partyUInfo,
         partyVInfo,
       )
@@ -74,6 +80,20 @@ async function decryptKeyManagement(
 
       // Key Agreement with Key Wrapping
       if (encryptedKey === undefined) throw new JWEInvalid('JWE Encrypted Key missing')
+
+      if (alg === 'ECDH-ES+C20PKW') {
+        // Key Agreement with ChaCha Key Wrapping
+        if (typeof joseHeader.iv !== 'string')
+          throw new JWEInvalid(`JOSE Header "iv" (Initialization Vector) missing or invalid`)
+
+        if (typeof joseHeader.tag !== 'string')
+          throw new JWEInvalid(`JOSE Header "tag" (Authentication Tag) missing or invalid`)
+
+        const iv = base64url(joseHeader.iv)
+        const tag = base64url(joseHeader.tag)
+
+        return enckw('C20PKW', sharedSecret, encryptedKey, iv, tag)
+      }
 
       return aesKw(alg.substr(-6), sharedSecret, encryptedKey)
     }
@@ -109,6 +129,7 @@ async function decryptKeyManagement(
 
       return aesKw(alg, key, encryptedKey)
     }
+    case isNodeJs() && 'C20PKW':
     case 'A128GCMKW':
     case 'A192GCMKW':
     case 'A256GCMKW': {
@@ -124,7 +145,7 @@ async function decryptKeyManagement(
       const iv = base64url(joseHeader.iv)
       const tag = base64url(joseHeader.tag)
 
-      return aesGcmKw(alg, key, encryptedKey, iv, tag)
+      return enckw(alg, key, encryptedKey, iv, tag)
     }
     default: {
       throw new JOSENotSupported('Invalid or unsupported "alg" (JWE Algorithm) header value')

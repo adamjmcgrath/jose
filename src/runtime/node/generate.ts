@@ -32,6 +32,10 @@ export async function generateSecret(alg: string, options?: GenerateSecretOption
     case 'A256GCM':
       length = parseInt(alg.substring(1, 4), 10)
       break
+    case 'C20P':
+    case 'C20PKW':
+      length = 256
+      break
     default:
       throw new JOSENotSupported('Invalid or unsupported JWK "alg" (Algorithm) Parameter value')
   }
@@ -88,6 +92,7 @@ export async function generateKeyPair(alg: string, options?: GenerateKeyPairOpti
       }
     }
     case 'ECDH-ES':
+    case 'ECDH-ES+C20PKW':
     case 'ECDH-ES+A128KW':
     case 'ECDH-ES+A192KW':
     case 'ECDH-ES+A256KW':

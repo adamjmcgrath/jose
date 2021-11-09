@@ -15,6 +15,9 @@ const checkCekLength = (enc: string, cek: KeyObject | Uint8Array) => {
     case 'A256GCM':
       expected = parseInt(enc.substr(1, 3), 10)
       break
+    case 'C20P':
+      expected = 256
+      break
     default:
       throw new JOSENotSupported(
         `Content Encryption Algorithm ${enc} is not supported either by JOSE or your javascript runtime`,

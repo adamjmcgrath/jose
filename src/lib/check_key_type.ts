@@ -62,7 +62,8 @@ const checkKeyType = (alg: string, key: unknown, usage: string): void => {
     alg.startsWith('HS') ||
     alg === 'dir' ||
     alg.startsWith('PBES2') ||
-    /^A\d{3}(?:GCM)?KW$/.test(alg)
+    /^A\d{3}(?:GCM)?KW$/.test(alg) ||
+    /^X?C20P?KW$/.test(alg)
 
   if (symmetric) {
     symmetricTypeCheck(key)

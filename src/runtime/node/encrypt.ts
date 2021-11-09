@@ -1,5 +1,5 @@
 import { createCipheriv, KeyObject } from 'crypto'
-import type { CipherGCMTypes } from 'crypto'
+import type { CipherCCMTypes, CipherGCMTypes } from 'crypto'
 
 import type { EncryptFunction } from '../interfaces.d'
 import checkIvLength from '../../lib/check_iv_length.js'
@@ -69,6 +69,30 @@ function gcmEncrypt(
   return { ciphertext, tag }
 }
 
+function ccmEncrypt(
+  enc: string,
+  plaintext: Uint8Array,
+  cek: KeyObject | Uint8Array,
+  iv: Uint8Array,
+  aad: Uint8Array,
+) {
+  const algorithm = <CipherCCMTypes>'chacha20-poly1305'
+  if (!supported(algorithm)) {
+    throw new JOSENotSupported(`alg ${enc} is not supported by your javascript runtime`)
+  }
+
+  const cipher = createCipheriv(algorithm, cek, iv, { authTagLength: 16 })
+  if (aad.byteLength) {
+    cipher.setAAD(aad, { plaintextLength: plaintext.length })
+  }
+
+  const ciphertext = cipher.update(plaintext)
+  cipher.final()
+  const tag = cipher.getAuthTag()
+
+  return { ciphertext, tag }
+}
+
 const encrypt: EncryptFunction = async (
   enc: string,
   plaintext: Uint8Array,
@@ -98,6 +122,8 @@ const encrypt: EncryptFunction = async (
     case 'A192GCM':
     case 'A256GCM':
       return gcmEncrypt(enc, plaintext, key, iv, aad)
+    case 'C20P':
+      return ccmEncrypt(enc, plaintext, key, iv, aad)
     default:
       throw new JOSENotSupported('Unsupported JWE Content Encryption Algorithm')
   }

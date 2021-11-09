@@ -1,5 +1,6 @@
 import { JOSENotSupported } from '../util/errors.js'
 import random from '../runtime/random.js'
+import { isNodeJs } from '../runtime/env.js'
 
 export function bitLength(alg: string) {
   switch (alg) {
@@ -9,6 +10,8 @@ export function bitLength(alg: string) {
     case 'A192GCMKW':
     case 'A256GCM':
     case 'A256GCMKW':
+    case isNodeJs() && 'C20P':
+    case isNodeJs() && 'C20PKW':
       return 96
     case 'A128CBC-HS256':
     case 'A192CBC-HS384':

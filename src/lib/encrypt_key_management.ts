@@ -1,3 +1,4 @@
+import { isNodeJs } from '../runtime/env.js'
 import { wrap as aesKw } from '../runtime/aeskw.js'
 import * as ECDH from '../runtime/ecdhes.js'
 import { encrypt as pbes2Kw } from '../runtime/pbes2kw.js'
@@ -9,7 +10,7 @@ import generateCek, { bitLength as cekLength } from '../lib/cek.js'
 import { JOSENotSupported } from '../util/errors.js'
 import { exportJWK } from '../key/export.js'
 import checkKeyType from './check_key_type.js'
-import { wrap as aesGcmKw } from './aesgcmkw.js'
+import { wrap as enckw } from './enckw.js'
 
 async function encryptKeyManagement(
   alg: string,
@@ -35,6 +36,7 @@ async function encryptKeyManagement(
       break
     }
     case 'ECDH-ES':
+    case isNodeJs() && 'ECDH-ES+C20PKW':
     case 'ECDH-ES+A128KW':
     case 'ECDH-ES+A192KW':
     case 'ECDH-ES+A256KW': {
@@ -52,7 +54,11 @@ async function encryptKeyManagement(
         key,
         ephemeralKey,
         alg === 'ECDH-ES' ? enc : alg,
-        alg === 'ECDH-ES' ? cekLength(enc) : parseInt(alg.substr(-5, 3), 10),
+        alg === 'ECDH-ES'
+          ? cekLength(enc)
+          : alg === 'ECDH-ES+C20PKW'
+          ? 256
+          : parseInt(alg.substr(-5, 3), 10),
         apu,
         apv,
       )
@@ -65,7 +71,16 @@ async function encryptKeyManagement(
         break
       }
 
-      // Key Agreement with Key Wrapping
+      if (alg === 'ECDH-ES+C20PKW') {
+        // Key Agreement with ChaCha Key Wrapping
+        cek = providedCek || generateCek(enc)
+        let kwParams: JWEHeaderParameters
+        ;({ encryptedKey, ...kwParams } = await enckw('C20PKW', sharedSecret, cek))
+        Object.assign(parameters, kwParams)
+        break
+      }
+
+      // Key Agreement with AES Key Wrapping
       cek = providedCek || generateCek(enc)
       const kwAlg = alg.substr(-6)
       encryptedKey = await aesKw(kwAlg, sharedSecret, cek)
@@ -98,13 +113,14 @@ async function encryptKeyManagement(
       encryptedKey = await aesKw(alg, key, cek)
       break
     }
+    case isNodeJs() && 'C20PKW':
     case 'A128GCMKW':
     case 'A192GCMKW':
     case 'A256GCMKW': {
       // Key Wrapping (AES GCM KW)
       cek = providedCek || generateCek(enc)
       const { iv } = providedParameters
-      ;({ encryptedKey, ...parameters } = await aesGcmKw(alg, key, cek, iv))
+      ;({ encryptedKey, ...parameters } = await enckw(alg, key, cek, iv))
       break
     }
     default: {
